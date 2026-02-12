@@ -1,22 +1,33 @@
 const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const express = require('express');
 const axios = require('axios');
+const path = require('path');
 
 // --- Configuration ---
 const HDHOMERUN_IP = process.env.HDHOMERUN_IP || '192.168.1.100';
 const MEDIAFLOW_URL = process.env.MEDIAFLOW_URL || 'http://localhost:8888';
 const MEDIAFLOW_PASS = process.env.MEDIAFLOW_PASS || '';
 const PORT = process.env.PORT || 7000;
+const EXTERNAL_URL = process.env.EXTERNAL_URL || `http://stremioota.lan`;
 
 const MANIFEST = {
     id: 'org.titleos.hdhomerun',
-    version: '1.0.0',
-    name: 'HDHomerun Live TV',
+    version: '1.2.2',
+    name: 'HDHomerun Live',
     description: `OTA via ${HDHOMERUN_IP}`,
     resources: ['catalog', 'meta', 'stream'],
     types: ['tv'],
     catalogs: [{ type: 'tv', id: 'hdhr_ota', name: 'HDHomerun' }],
     idPrefixes: ['hdhr_']
+};
+
+// Helper: Determine if a logo likely exists or return the placeholder
+const getAssetUrl = (guideNum) => {
+    // If you want to blindly trust the tuner:
+    // return `http://${HDHOMERUN_IP}/images/L${guideNum}.png`;
+    
+    // Better: Serve the fallback from our own server
+    return `${EXTERNAL_URL}/assets/L${guideNum}.png`;
 };
 
 const builder = new addonBuilder(MANIFEST);
@@ -29,35 +40,28 @@ builder.defineCatalogHandler(async () => {
             id: `hdhr_${c.GuideNumber}`,
             type: 'tv',
             name: c.GuideName,
-            poster: `https://logo.clearqam.net/l/${c.GuideNumber}.png`,
-            description: `Channel ${c.GuideNumber}`
+            poster: getAssetUrl(c.GuideNumber),
+            logo: getAssetUrl(c.GuideNumber),
+            description: `Live on ${c.GuideName}`
         }));
         return { metas };
-    } catch (e) {
-        console.error('HDHomerun unreachable:', e.message);
-        return { metas: [] };
-    }
+    } catch (e) { return { metas: [] }; }
 });
 
 // 2. Meta Handler
-// 2. Meta Handler: Detailed view for the channel page
 builder.defineMetaHandler(async ({ id }) => {
     const guideNum = id.replace('hdhr_', '');
-    
-    // We create a generic but complete meta object to ensure the UI renders
-    const meta = {
-        id: id,
-        type: 'tv',
-        name: `Channel ${guideNum}`,
-        poster: `https://logo.clearqam.net/l/${guideNum}.png`,
-        logo: `https://logo.clearqam.net/l/${guideNum}.png`,
-        background: `https://logo.clearqam.net/l/${guideNum}.png`, // Added for UI stability
-        description: `Streaming Live from HDHomerun Channel ${guideNum}`,
-        runtime: "LIVE",
-        status: "Currently Airing"
+    return {
+        meta: {
+            id,
+            type: 'tv',
+            name: `Channel ${guideNum}`,
+            poster: getAssetUrl(guideNum),
+            logo: getAssetUrl(guideNum),
+            background: getAssetUrl(guideNum),
+            description: `Streaming Live from HDHomerun Channel ${guideNum}`,
+        }
     };
-
-    return { meta };
 });
 
 // 3. Stream Handler
@@ -65,7 +69,6 @@ builder.defineStreamHandler(async ({ id }) => {
     const guideNum = id.replace('hdhr_', '');
     const rawUrl = `http://${HDHOMERUN_IP}:5004/auto/v${guideNum}`;
     const proxiedUrl = `${MEDIAFLOW_URL}/proxy/stream?d=${encodeURIComponent(rawUrl)}&api_password=${MEDIAFLOW_PASS}`;
-
     return {
         streams: [
             { title: '🌀 Mediaflow Proxy', url: proxiedUrl },
@@ -74,26 +77,31 @@ builder.defineStreamHandler(async ({ id }) => {
     };
 });
 
-// --- Server Setup (Using Express) ---
+// --- Server Setup ---
 const app = express();
 const addonInterface = builder.getInterface();
 const addonRouter = getRouter(addonInterface);
 
-// Mount the Stremio addon (handles /manifest.json, /catalog, etc.)
 app.use('/', addonRouter);
 
-// Add the custom Health Check endpoint
+// New Asset Route: Tries to get the real logo, falls back to your retro TV PNG
+app.get('/assets/:filename', async (req, res) => {
+    const logoUrl = `http://${HDHOMERUN_IP}/images/${req.params.filename}`;
+    try {
+        // We do a quick HEAD request to see if the tuner actually has the logo
+        await axios.head(logoUrl, { timeout: 1000 });
+        res.redirect(logoUrl);
+    } catch (e) {
+        // Fallback to the local file in your repo
+        res.sendFile(path.join(__dirname, 'fallback_icon.png'));
+    }
+});
+
 app.get('/health', async (req, res) => {
     try {
         await axios.get(`http://${HDHOMERUN_IP}/discover.json`, { timeout: 1500 });
         res.status(200).send('OK');
-    } catch (e) {
-        res.status(503).send('HDHomerun Unreachable');
-    }
+    } catch (e) { res.status(503).send('Unreachable'); }
 });
 
-app.listen(PORT, () => {
-    console.log(`Addon active at http://localhost:${PORT}/manifest.json`);
-    console.log(`Health check at http://localhost:${PORT}/health`);
-});
-
+app.listen(PORT, () => console.log(`Addon active on port ${PORT}`));
