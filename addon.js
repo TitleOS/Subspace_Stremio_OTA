@@ -1,7 +1,8 @@
-const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
+const { addonBuilder, getRouter } = require('stremio-addon-sdk');
+const express = require('express');
 const axios = require('axios');
-const http = require('http');
 
+// --- Configuration ---
 const HDHOMERUN_IP = process.env.HDHOMERUN_IP || '192.168.1.100';
 const MEDIAFLOW_URL = process.env.MEDIAFLOW_URL || 'http://localhost:8888';
 const MEDIAFLOW_PASS = process.env.MEDIAFLOW_PASS || '';
@@ -20,10 +21,10 @@ const MANIFEST = {
 
 const builder = new addonBuilder(MANIFEST);
 
-// --- Handlers ---
+// 1. Catalog Handler
 builder.defineCatalogHandler(async () => {
     try {
-        const res = await axios.get(`http://${HDHOMERUN_IP}/lineup.json`, { timeout: 2000 });
+        const res = await axios.get(`http://${HDHOMERUN_IP}/lineup.json`, { timeout: 3000 });
         const metas = res.data.map(c => ({
             id: `hdhr_${c.GuideNumber}`,
             type: 'tv',
@@ -32,9 +33,13 @@ builder.defineCatalogHandler(async () => {
             description: `Channel ${c.GuideNumber}`
         }));
         return { metas };
-    } catch (e) { return { metas: [] }; }
+    } catch (e) {
+        console.error('HDHomerun unreachable:', e.message);
+        return { metas: [] };
+    }
 });
 
+// 2. Meta Handler
 builder.defineMetaHandler(async ({ id }) => {
     const guideNum = id.replace('hdhr_', '');
     return {
@@ -48,10 +53,12 @@ builder.defineMetaHandler(async ({ id }) => {
     };
 });
 
+// 3. Stream Handler
 builder.defineStreamHandler(async ({ id }) => {
     const guideNum = id.replace('hdhr_', '');
     const rawUrl = `http://${HDHOMERUN_IP}:5004/auto/v${guideNum}`;
     const proxiedUrl = `${MEDIAFLOW_URL}/proxy/stream?d=${encodeURIComponent(rawUrl)}&api_password=${MEDIAFLOW_PASS}`;
+
     return {
         streams: [
             { title: '🌀 Mediaflow Proxy', url: proxiedUrl },
@@ -60,14 +67,17 @@ builder.defineStreamHandler(async ({ id }) => {
     };
 });
 
-// --- Health Check & Server ---
+// --- Server Setup (Using Express) ---
+const app = express();
 const addonInterface = builder.getInterface();
-const server = serveHTTP(addonInterface, { port: PORT });
+const addonRouter = getRouter(addonInterface);
 
-// Add a custom health check endpoint to the existing server
-server.get('/health', async (req, res) => {
+// Mount the Stremio addon (handles /manifest.json, /catalog, etc.)
+app.use('/', addonRouter);
+
+// Add the custom Health Check endpoint
+app.get('/health', async (req, res) => {
     try {
-        // Check if HDHomerun is responding
         await axios.get(`http://${HDHOMERUN_IP}/discover.json`, { timeout: 1500 });
         res.status(200).send('OK');
     } catch (e) {
@@ -75,4 +85,7 @@ server.get('/health', async (req, res) => {
     }
 });
 
-console.log(`Addon running on port ${PORT}. Health check at /health`);
+app.listen(PORT, () => {
+    console.log(`Addon active at http://localhost:${PORT}/manifest.json`);
+    console.log(`Health check at http://localhost:${PORT}/health`);
+});
