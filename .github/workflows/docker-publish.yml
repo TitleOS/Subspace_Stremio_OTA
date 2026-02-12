@@ -42,10 +42,9 @@ jobs:
         with:
           context: .
           push: true
-          # Tags: 'latest' for general use, and the commit SHA for version locking
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          # Caching makes subsequent builds much faster
-          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+          # UPDATED: Use GitHub Actions native cache instead of Registry cache
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
