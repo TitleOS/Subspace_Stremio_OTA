@@ -40,17 +40,24 @@ builder.defineCatalogHandler(async () => {
 });
 
 // 2. Meta Handler
+// 2. Meta Handler: Detailed view for the channel page
 builder.defineMetaHandler(async ({ id }) => {
     const guideNum = id.replace('hdhr_', '');
-    return {
-        meta: {
-            id,
-            type: 'tv',
-            name: `Channel ${guideNum}`,
-            poster: `https://logo.clearqam.net/l/${guideNum}.png`,
-            logo: `https://logo.clearqam.net/l/${guideNum}.png`
-        }
+    
+    // We create a generic but complete meta object to ensure the UI renders
+    const meta = {
+        id: id,
+        type: 'tv',
+        name: `Channel ${guideNum}`,
+        poster: `https://logo.clearqam.net/l/${guideNum}.png`,
+        logo: `https://logo.clearqam.net/l/${guideNum}.png`,
+        background: `https://logo.clearqam.net/l/${guideNum}.png`, // Added for UI stability
+        description: `Streaming Live from HDHomerun Channel ${guideNum}`,
+        runtime: "LIVE",
+        status: "Currently Airing"
     };
+
+    return { meta };
 });
 
 // 3. Stream Handler
@@ -89,3 +96,4 @@ app.listen(PORT, () => {
     console.log(`Addon active at http://localhost:${PORT}/manifest.json`);
     console.log(`Health check at http://localhost:${PORT}/health`);
 });
+
