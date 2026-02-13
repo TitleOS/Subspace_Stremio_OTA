@@ -1,6 +1,6 @@
 {
-  "name": "hdhomerun-stremio-addon",
-  "version": "1.0.0",
+  "name": "subspace-stremio-addon",
+  "version": "1.1.1",
   "description": "A Stremio addon that exposes your local OTA channels provided by a HDHomeRun tuner as Live TV channels in Stremio with Mediaflow proxy support.",
   "main": "addon.js",
   "scripts": {
