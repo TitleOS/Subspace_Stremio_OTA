@@ -2,7 +2,7 @@
 
 A Stremio addon that imports your local OTA (Over-the-Air) channels from an **HDHomeRun Connect 4K** tuner directly into the Stremio interface.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Docker](https://img.shields.io/badge/docker-automated-green)
+![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Docker](https://img.shields.io/badge/docker-automated-green) ![Stremio Addon](https://img.shields.io/badge/stremio-purple)
 
 ## 📺 Features
 
@@ -24,9 +24,9 @@ services:
     restart: always
     environment:
       - HDHOMERUN_IP=192.168.1.100       # Your HDHomeRun LAN IP
-      - MEDIAFLOW_URL=[http://192.168.1.50:8888](http://192.168.1.50:8888)  # Your Mediaflow Proxy URL
+      - MEDIAFLOW_URL=http://192.168.1.50:8888  # Your Mediaflow Proxy URL
       - MEDIAFLOW_PASS=your_password     # Your Mediaflow API Password
-      - EXTERNAL_URL=[http://stremioota.lcars.lan](http://stremioota.lan) # URL to reach this addon
+      - EXTERNAL_URL=http://stremioota.lan # URL to reach this addon
       - DEBUG_LOGGING=false              # Set to 'true' for verbose logs
     ports:
       - "7000:7000"
@@ -42,7 +42,7 @@ docker run -d \
   -e HDHOMERUN_IP=192.168.1.100 \
   -e MEDIAFLOW_URL=[http://192.168.1.50:8888](http://192.168.1.50:8888) \
   -e MEDIAFLOW_PASS=your_password \
-  -e EXTERNAL_URL=[http://stremioota.lcars.lan](http://stremioota.lan) \
+  -e EXTERNAL_URL=http://stremioota.lan \
   -p 7000:7000 \
   titleos/hdhomerun-stremio:latest
 
