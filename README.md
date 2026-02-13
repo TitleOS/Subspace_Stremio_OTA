@@ -1,20 +1,20 @@
 # HDHomeRun Stremio Addon
 
-A Stremio addon that imports your local OTA (Over-the-Air) channels from an HDHomeRun OTA Tuner such as a **HDHomeRun Connect 4K** directly into the Stremio interface.
+A Stremio addon that imports your local OTA (Over-the-Air) channels from an **HDHomeRun Connect 4K** tuner directly into the Stremio interface.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Docker](https://img.shields.io/badge/docker-automated-green)
 
 ## 📺 Features
 
 * **Live TV Catalog:** Adds a "HDHomerun" row to your Stremio Board.
-* **Live Metadata:** Displays "Now Playing" information on channel posters (fetched from `discover.json`).
-* **Transcoding Support:** Routes streams through a [Mediaflow Proxy](https://github.com/mhadzic/mediaflow-proxy) to handle ATSC 3.0 (AC-4 audio) and improve compatibility with Stremio players (ExoPlayer/VLC).
-* **Fast Zapping:** Lightweight Node.js backend designed for local network speed.
+* **Smart EPG:** Automatically fetches "Now Playing" data using your HDHomeRun's native cloud guide (no extra config/ZIP needed).
+* **Dynamic Logos:** Fetches channel logos from GitHub, falls back to generated Avatars, and finally to a local retro-style icon.
+* **Tech Specs Dashboard:** View real-time signal strength, quality, and codec info directly in the stream list.
+* **Transcoding Support:** Routes streams through a [Mediaflow Proxy](https://github.com/mhadzic/mediaflow-proxy) to handle ATSC 3.0 (AC-4 audio).
 
-## Installation
+## 🚀 Installation
 
 ### Option 1: Docker Compose (Recommended)
-Add this service to your existing stack or create a new `docker-compose.yml`:
 
 ```yaml
 services:
@@ -26,8 +26,8 @@ services:
       - HDHOMERUN_IP=192.168.1.100       # Your HDHomeRun LAN IP
       - MEDIAFLOW_URL=[http://192.168.1.50:8888](http://192.168.1.50:8888)  # Your Mediaflow Proxy URL
       - MEDIAFLOW_PASS=your_password     # Your Mediaflow API Password
-      - PORT=7000                        # Internal container port
-      - DEBUG_LOGGING=true               # Print all HTTP requests and also debug info to the console.
+      - EXTERNAL_URL=[http://stremioota.lcars.lan](http://stremioota.lan) # URL to reach this addon
+      - DEBUG_LOGGING=false              # Set to 'true' for verbose logs
     ports:
       - "7000:7000"
 
@@ -42,27 +42,23 @@ docker run -d \
   -e HDHOMERUN_IP=192.168.1.100 \
   -e MEDIAFLOW_URL=[http://192.168.1.50:8888](http://192.168.1.50:8888) \
   -e MEDIAFLOW_PASS=your_password \
+  -e EXTERNAL_URL=[http://stremioota.lcars.lan](http://stremioota.lan) \
   -p 7000:7000 \
   titleos/hdhomerun-stremio:latest
 
 ```
 
-## Configuration
+## ⚙️ Configuration
 
 | Variable | Description | Default |
-| :--- | :--- | :--- |
+| --- | --- | --- |
 | `HDHOMERUN_IP` | The local IP address of your HDHomeRun tuner. | `192.168.1.100` |
 | `EXTERNAL_URL` | The URL used to reach this addon (used for logo proxying). | `http://stremioota.lan` |
 | `MEDIAFLOW_URL` | The full URL to your Mediaflow Proxy instance. | `http://localhost:8888` |
 | `MEDIAFLOW_PASS` | The API password configured in Mediaflow. | `(Empty)` |
-| `PORT` | The port the addon listens on. | `7000` |
-| `DEBUG_LOGGING` | Log debug content to the console such as HTTP requests. | `true` |
+| `DEBUG_LOGGING` | Enable request logging for troubleshooting. | `false` |
 
-## LAN Environment Setup
-
-In a local network (LAN) setup, especially when using a custom domain like `.lan` or `.local`, you must define the `EXTERNAL_URL` so Stremio knows where to fetch the channel logos and the fallback placeholder.
-
-## Connecting to Stremio
+## 🔌 Connecting to Stremio
 
 1. Ensure the container is running and accessible.
 2. Open Stremio on your device.
@@ -75,24 +71,6 @@ http://YOUR_SERVER_IP:7000/manifest.json
 
 4. Click **Install**.
 
-> **Tip:** You can use [Stremio Addon Manager](https://stremio-addon-manager.vercel.app/) or **AIOStreams** to reorder your catalogs, moving "HDHomerun" to the top of your board for easy access.
+## 📝 License
 
-## Local Development
-
-If you want to modify the code or run it without Docker:
-
-```bash
-# Clone the repo
-git clone [https://github.com/TitleOS/hdhomerun-stremio.git](https://github.com/TitleOS/hdhomerun-stremio.git)
-
-# Install dependencies
-npm install
-
-# Run (ensure environment variables are set)
-node addon.js
-
-```
-
-## License
-
-Mozilla Public License 2.0 MPL-2.0 - Created by **TitleOS**
+MPL-2.0 - Created by **TitleOS**
