@@ -148,7 +148,7 @@ builder.defineStreamHandler(async ({ type, id }) => {
 
             techInfoStream = {
                 name: "ℹ️ DEVICE INFO",
-                title: `${tunerStr}\n${signalStr}\n${codecStr} (${hdStr})\nIs Silicon Dust Status (Premium required for EPG Guide Data): ${isPremiumSub}`,
+                title: `${tunerStr}\n${signalStr}\n${codecStr} (${hdStr})\nSilicon Dust Subscriber Status (Premium required for EPG Guide Data): ${isPremiumSub}`,
                 url: `${EXTERNAL_URL}/assets/hdhomerun_icon.png`
             };
         }
@@ -211,3 +211,4 @@ app.get('/health', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Addon active on port ${PORT} (Debug: ${DEBUG})`));
+
