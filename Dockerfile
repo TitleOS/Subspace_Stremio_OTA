@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM nodesource/nsolid:alpine-latest
 RUN apk add --no-cache curl
 WORKDIR /app
 COPY package*.json ./
@@ -9,3 +9,4 @@ EXPOSE 7000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:7000/health || exit 1
 CMD ["node", "addon.js"]
+
