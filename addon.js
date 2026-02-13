@@ -13,20 +13,47 @@ const DEBUG = process.env.DEBUG_LOGGING === 'true';
 
 const MANIFEST = {
     id: 'org.titleos.hdhomerun',
-    version: '1.0.0',
+    version: '1.4.0',
     name: 'HDHomerun Live',
     description: `OTA via ${HDHOMERUN_IP}`,
     resources: ['catalog', 'meta', 'stream'],
-    types: ['tv'],
-    catalogs: [{ type: 'tv', id: 'hdhr_ota', name: 'HDHomerun' }],
+    // CHANGE: 'channel' type fixes the "No Information" error for live streams
+    types: ['channel'], 
+    catalogs: [{ type: 'channel', id: 'hdhr_ota', name: 'HDHomerun' }],
     idPrefixes: ['hdhr_']
 };
 
 // Helper: Embed the name in the URL so the proxy knows what to look for
 const getAssetUrl = (guideName) => {
-    // Sanitize: "WCCO-DT" -> "WCCO" to improve matching chances
     const cleanName = guideName.replace(/[-\s]?(DT|HD|LD)\d*$/i, '').replace(/\s+/g, '');
     return `${EXTERNAL_URL}/assets/${encodeURIComponent(cleanName)}.png`;
+};
+
+// Helper: Fetch Guide Data from SiliconDust Cloud API
+const getNowPlaying = async (guideNumber) => {
+    try {
+        // 1. Get Device Auth String from local tuner
+        const discover = await axios.get(`http://${HDHOMERUN_IP}/discover.json`, { timeout: 1000 });
+        const deviceAuth = discover.data.DeviceAuth;
+        if (!deviceAuth) return null;
+
+        // 2. Query the SiliconDust Cloud API (Native HDHR EPG)
+        // This is better than a generic database because it matches your exact tuner config
+        const guideRes = await axios.get(`http://api.hdhomerun.com/api/guide?DeviceAuth=${deviceAuth}`, { timeout: 2000 });
+        
+        // 3. Find our channel
+        const channelData = guideRes.data.find(c => c.GuideNumber === guideNumber);
+        if (!channelData || !channelData.Guide) return null;
+
+        // 4. Find the current program
+        const now = Math.floor(Date.now() / 1000);
+        const currentProg = channelData.Guide.find(p => now >= p.StartTime && now < p.EndTime);
+        
+        return currentProg ? currentProg.Title : null;
+    } catch (e) {
+        if (DEBUG) console.log(`[EPG] Failed to fetch guide: ${e.message}`);
+        return null;
+    }
 };
 
 const builder = new addonBuilder(MANIFEST);
@@ -36,9 +63,10 @@ builder.defineCatalogHandler(async ({ type, id }) => {
     if (DEBUG) console.log(`[CATALOG] Request for ${type} / ${id}`);
     try {
         const res = await axios.get(`http://${HDHOMERUN_IP}/lineup.json`, { timeout: 3000 });
+        // Map 'channel' type
         const metas = res.data.map(c => ({
             id: `hdhr_${c.GuideNumber}`,
-            type: 'tv',
+            type: 'channel',
             name: c.GuideName,
             poster: getAssetUrl(c.GuideName),
             logo: getAssetUrl(c.GuideName),
@@ -53,10 +81,10 @@ builder.defineCatalogHandler(async ({ type, id }) => {
 
 // 2. Meta Handler
 builder.defineMetaHandler(async ({ type, id }) => {
-    if (type !== 'tv' || !id.startsWith('hdhr_')) return { meta: null };
+    if (type !== 'channel' || !id.startsWith('hdhr_')) return { meta: null };
     const guideNum = id.replace('hdhr_', '');
     
-    // We need to fetch the lineup again to get the name for the logo
+    // Fetch Basic Info
     let guideName = `Channel ${guideNum}`;
     try {
         const res = await axios.get(`http://${HDHOMERUN_IP}/lineup.json`, { timeout: 1500 });
@@ -64,17 +92,26 @@ builder.defineMetaHandler(async ({ type, id }) => {
         if (channel) guideName = channel.GuideName;
     } catch (e) {}
 
+    // Fetch EPG (Now Playing)
+    const currentProgram = await getNowPlaying(guideNum);
+    const description = currentProgram 
+        ? `Live on ${currentProgram}` 
+        : `Live on ${guideName}`;
+
     return {
         meta: {
             id: id,
-            type: 'tv',
+            type: 'channel',
             name: guideName,
             poster: getAssetUrl(guideName),
             logo: getAssetUrl(guideName),
             background: getAssetUrl(guideName),
-            description: `Live OTA Broadcast from HDHomerun Tuner.`,
+            description: description,
             runtime: "LIVE",
-            behaviorHints: { isLive: true }
+            behaviorHints: { 
+                isLive: true,
+                defaultVideoId: id // Helps Stremio know to play immediately
+            }
         }
     };
 });
@@ -82,7 +119,7 @@ builder.defineMetaHandler(async ({ type, id }) => {
 // 3. Stream Handler
 builder.defineStreamHandler(async ({ type, id }) => {
     if (DEBUG) console.log(`[STREAM] Request for ${type} / ${id}`);
-    if (type !== 'tv' || !id.startsWith('hdhr_')) return { streams: [] };
+    if (type !== 'channel' || !id.startsWith('hdhr_')) return { streams: [] };
 
     const guideNum = id.replace('hdhr_', '');
     const rawUrl = `http://${HDHOMERUN_IP}:5004/auto/v${guideNum}`;
@@ -134,31 +171,25 @@ const addonRouter = getRouter(addonInterface);
 if (DEBUG) app.use((req, res, next) => { console.log(`[HTTP] ${req.method} ${req.url}`); next(); });
 app.use('/', addonRouter);
 
-// --- ASSET ROUTE: The Logic Engine ---
+// --- ASSET ROUTE ---
 app.get('/assets/:filename', async (req, res) => {
     const rawName = req.params.filename.replace('.png', '');
     const cleanName = decodeURIComponent(rawName);
 
-    // 1. Define Sources
     const githubUrl = `https://raw.githubusercontent.com/tv-logos/tv-logos/main/countries/united-states/${cleanName}.png`;
     const uiAvatarsUrl = `https://ui-avatars.com/api/?name=${cleanName}&background=random&color=fff&size=512&font-size=0.5&bold=true`;
 
     if (DEBUG) console.log(`[ASSET] Looking for logo: ${cleanName}`);
 
     try {
-        // A. Try GitHub Repo first (Real Logo)
-        // We use a HEAD request to check if it exists without downloading the whole thing
         await axios.head(githubUrl, { timeout: 1500 });
         if (DEBUG) console.log(`[ASSET] Found on GitHub: ${cleanName}`);
         res.redirect(githubUrl);
     } catch (e1) {
         try {
-            // B. GitHub failed? Fallback to UI Avatars (Generated Initials)
-            // This guarantees a dynamic, unique image for every channel
             if (DEBUG) console.log(`[ASSET] GitHub missed. Using UI Avatar for: ${cleanName}`);
             res.redirect(uiAvatarsUrl);
         } catch (e2) {
-            // C. Final Fallback (Your local icon)
             if (DEBUG) console.log(`[ASSET] Total failure. Serving fallback_icon.png`);
             res.sendFile(path.join(__dirname, 'fallback_icon.png'));
         }
