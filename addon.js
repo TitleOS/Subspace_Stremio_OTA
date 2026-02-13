@@ -7,13 +7,16 @@ const path = require('path');
 const HDHOMERUN_IP = process.env.HDHOMERUN_IP || '192.168.1.100';
 const MEDIAFLOW_URL = process.env.MEDIAFLOW_URL || 'http://localhost:8888';
 const MEDIAFLOW_PASS = process.env.MEDIAFLOW_PASS || '';
-const EXTERNAL_URL = process.env.EXTERNAL_URL || 'http://stremioota.lan';
+const EXTERNAL_URL = process.env.EXTERNAL_URL || 'http://stremioota.lcars.lan';
 const PORT = process.env.PORT || 7000;
 const DEBUG = process.env.DEBUG_LOGGING === 'true';
 
+// Global flag to shut off EPG if we get a 403 (Subscription required)
+let EPG_ENABLED = true;
+
 const MANIFEST = {
     id: 'org.titleos.hdhomerun',
-    version: '1.1.0', // Bump version
+    version: '1.1.1',
     name: 'HDHomerun Live',
     description: `OTA via ${HDHOMERUN_IP}`,
     resources: ['catalog', 'meta', 'stream'],
@@ -27,35 +30,36 @@ const getAssetUrl = (guideName) => {
     return `${EXTERNAL_URL}/assets/${encodeURIComponent(cleanName)}.png`;
 };
 
-// --- EPG Logic ---
+// --- EPG Logic (With 403 Protection) ---
 const getNowPlaying = async (guideNumber) => {
+    // 1. If we already know we're blocked, stop asking.
+    if (!EPG_ENABLED) return null;
+
     try {
-        // 1. Get Device Auth
         const discover = await axios.get(`http://${HDHOMERUN_IP}/discover.json`, { timeout: 1000 });
         const deviceAuth = discover.data.DeviceAuth;
-        if (!deviceAuth) {
-            if (DEBUG) console.log(`[EPG] No DeviceAuth found in discover.json`);
-            return null;
-        }
+        if (!deviceAuth) return null;
 
-        // 2. Fetch Guide
         const guideRes = await axios.get(`http://api.hdhomerun.com/api/guide?DeviceAuth=${deviceAuth}`, { timeout: 2000 });
         
-        // 3. Find Channel
         const channelData = guideRes.data.find(c => c.GuideNumber === guideNumber);
-        if (!channelData || !channelData.Guide) {
-            if (DEBUG) console.log(`[EPG] No guide data found for Channel ${guideNumber}`);
-            return null;
-        }
+        if (!channelData || !channelData.Guide) return null;
 
-        // 4. Find Program
-        const now = Math.floor(Date.now() / 1000); // Current time in seconds
+        const now = Math.floor(Date.now() / 1000);
         const currentProg = channelData.Guide.find(p => now >= p.StartTime && now < p.EndTime);
         
-        if (currentProg && DEBUG) console.log(`[EPG] Ch ${guideNumber} is playing: ${currentProg.Title}`);
-        
+        if (currentProg && DEBUG) console.log(`[EPG] Ch ${guideNumber}: ${currentProg.Title}`);
         return currentProg ? currentProg.Title : null;
+
     } catch (e) {
+        // 2. Handle the 403 Forbidden specifically
+        if (e.response && e.response.status === 403) {
+            console.warn(`[EPG] Access Denied (403). SiliconDust requires a DVR subscription for Guide Data.`);
+            console.warn(`[EPG] Disabling EPG features for this session to prevent errors.`);
+            EPG_ENABLED = false; // Kill switch
+            return null;
+        }
+        
         if (DEBUG) console.log(`[EPG] Error: ${e.message}`);
         return null;
     }
@@ -93,7 +97,7 @@ builder.defineMetaHandler(async ({ type, id }) => {
         if (channel) guideName = channel.GuideName;
     } catch (e) {}
 
-    // Try to get EPG for description (might be cached by Stremio)
+    // Try EPG, but if blocked (403), gracefully fallback to Channel Name
     let description = `Live on ${guideName}`;
     const nowPlaying = await getNowPlaying(guideNum);
     if (nowPlaying) description = `Live on ${nowPlaying}`;
@@ -113,7 +117,7 @@ builder.defineMetaHandler(async ({ type, id }) => {
     };
 });
 
-// 3. Stream Handler (Updated with EPG in Title)
+// 3. Stream Handler
 builder.defineStreamHandler(async ({ type, id }) => {
     if ((type !== 'tv' && type !== 'channel') || !id.startsWith('hdhr_')) return { streams: [] };
 
@@ -121,11 +125,11 @@ builder.defineStreamHandler(async ({ type, id }) => {
     const rawUrl = `http://${HDHOMERUN_IP}:5004/auto/v${guideNum}`;
     const hlsUrl = `${MEDIAFLOW_URL}/proxy/hls/manifest.m3u8?d=${encodeURIComponent(rawUrl)}&api_password=${encodeURIComponent(MEDIAFLOW_PASS)}`;
     
-    // Fetch EPG immediately for the Stream Title
+    // Fetch EPG for Title
     const nowPlaying = await getNowPlaying(guideNum);
-    const showTitle = nowPlaying ? `(${nowPlaying})` : '(Live)';
+    const showTitle = nowPlaying ? `(${nowPlaying})` : '';
 
-    // Tech Info
+    // Tech Info Stream
     let techInfoStream = null;
     try {
         const [discoverRes, lineupRes] = await Promise.all([
@@ -140,10 +144,11 @@ builder.defineStreamHandler(async ({ type, id }) => {
             const signalStr = `Signal: ${channel.SignalStrength}% / Qual: ${channel.SignalQuality}%`;
             const codecStr = `${channel.VideoCodec}/${channel.AudioCodec}`;
             const hdStr = channel.HD === 1 ? 'HD' : 'SD';
+            const isPremiumSub = EPG_ENABLED === true ? 'Silicon Dust Premium' : 'Not a Silicon Dust Subscriber';
 
             techInfoStream = {
                 name: "ℹ️ DEVICE INFO",
-                title: `${tunerStr}\n${signalStr}\n${codecStr} (${hdStr})`,
+                title: `${tunerStr}\n${signalStr}\n${codecStr} (${hdStr})\nIs Silicon Dust Status (Premium required for EPG Guide Data): ${isPremiumSub}`,
                 url: `${EXTERNAL_URL}/assets/hdhomerun_icon.png`
             };
         }
@@ -158,7 +163,6 @@ builder.defineStreamHandler(async ({ type, id }) => {
     return {
         streams: [
             { 
-                // Displays: "🌀 Mediaflow (The Price Is Right)"
                 title: `🌀 Mediaflow ${showTitle}`, 
                 url: hlsUrl,
                 behaviorHints: { notWebReady: false, bingeGroup: "tv" } 
@@ -184,7 +188,7 @@ app.use('/', addonRouter);
 app.get('/assets/:filename', async (req, res) => {
     const rawName = req.params.filename.replace('.png', '');
     const cleanName = decodeURIComponent(rawName);
-    //const githubUrl = `https://raw.githubusercontent.com/tv-logos/tv-logos/main/countries/united-states/us-local/${cleanName}.png`;
+    const githubUrl = `https://raw.githubusercontent.com/tv-logos/tv-logos/main/countries/united-states/${cleanName}.png`;
     const uiAvatarsUrl = `https://ui-avatars.com/api/?name=${cleanName}&background=random&color=fff&size=512&font-size=0.5&bold=true`;
 
     try {
@@ -202,7 +206,7 @@ app.get('/assets/:filename', async (req, res) => {
 app.get('/health', async (req, res) => {
     try {
         await axios.get(`http://${HDHOMERUN_IP}/discover.json`, { timeout: 1500 });
-        res.status(200).send(`HDHomerun available at ${HDHOMERUN_IP}`);
+        res.status(200).send('OK');
     } catch (e) { res.status(503).send('Unreachable'); }
 });
 
