@@ -1,8 +1,9 @@
-# HDHomeRun Stremio Addon
+# Subspace
 
 A Stremio addon that imports your local OTA (Over-the-Air) channels from an **HDHomeRun Connect 4K** tuner directly into the Stremio interface.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Docker](https://img.shields.io/badge/docker-automated-green) ![Stremio Addon](https://img.shields.io/badge/stremio-purple)
+![Version](https://img.shields.io/badge/version-1.1.1-blue) ![Docker](https://img.shields.io/badge/docker-automated-green) ![Stremio Addon](https://img.shields.io/badge/stremio-purple)
+![Status](https://img.shields.io/badge/access-private_beta-red)
 
 ## 📺 Features
 
@@ -67,9 +68,10 @@ docker run -d \
 http://YOUR_SERVER_IP:7000/manifest.json
 
 ```
-
-
 4. Click **Install**.
+
+## Public Instance (Private Beta) 
+I'm currently hosting a public instance in private beta that is fed Minneapolis-St Paul OTA channels via my HDHomeRun Connect 4k. To prevent restreaming and limit bandwidth, an API Key is required for the beta at this time. Email titleos@titleos.dev if interested with the subject line "Subspace Addon Private Beta". Rate limiting for streams is applied and will be adjusted as needed. 
 
 ## 📝 License
 
