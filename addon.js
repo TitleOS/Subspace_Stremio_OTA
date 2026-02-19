@@ -16,7 +16,7 @@ let EPG_ENABLED = true;
 
 const MANIFEST = {
     id: 'org.titleos.hdhomerun',
-    version: '1.1.1',
+    version: '1.1.2',
     name: 'HDHomerun Live',
     description: `OTA via ${HDHOMERUN_IP}`,
     resources: ['catalog', 'meta', 'stream'],
@@ -211,5 +211,6 @@ app.get('/health', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Addon active on port ${PORT} (Debug: ${DEBUG})`));
+
 
 
