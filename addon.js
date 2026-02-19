@@ -123,7 +123,7 @@ builder.defineStreamHandler(async ({ type, id }) => {
 
     const guideNum = id.replace('hdhr_', '');
     const rawUrl = `http://${HDHOMERUN_IP}:5004/auto/v${guideNum}`;
-    const hlsUrl = `${MEDIAFLOW_URL}/proxy/hls/manifest.m3u8?d=${encodeURIComponent(rawUrl)}&api_password=${encodeURIComponent(MEDIAFLOW_PASS)}`;
+    const hlsUrl = `${MEDIAFLOW_URL}/proxy/hls/manifest.m3u8?d=${encodeURIComponent(rawUrl)}&api_password=${encodeURIComponent(MEDIAFLOW_PASS)}&transcode=true`; //Add transcode=true for new On-The-Fly transcoding offered by Mediaflow-Proxy 2.4.3. 
     
     // Fetch EPG for Title
     const nowPlaying = await getNowPlaying(guideNum);
@@ -144,7 +144,7 @@ builder.defineStreamHandler(async ({ type, id }) => {
             const signalStr = `Signal: ${channel.SignalStrength}% / Qual: ${channel.SignalQuality}%`;
             const codecStr = `${channel.VideoCodec}/${channel.AudioCodec}`;
             const hdStr = channel.HD === 1 ? 'HD' : 'SD';
-            const isPremiumSub = EPG_ENABLED === true ? 'Silicon Dust Premium' : 'Not a Silicon Dust Subscriber';
+            const isPremiumSub = EPG_ENABLED === true ? 'Silicon Dust Premium' : 'Silicon Dust Free';
 
             techInfoStream = {
                 name: "ℹ️ DEVICE INFO",
@@ -211,4 +211,5 @@ app.get('/health', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Addon active on port ${PORT} (Debug: ${DEBUG})`));
+
 
